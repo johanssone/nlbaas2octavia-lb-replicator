@@ -13,6 +13,8 @@
 #    under the License.
 import json
 
+import neutronclient
+
 from pprint import pprint
 
 from nlbaas2octavia_lb_replicator.common import os_clients
@@ -29,7 +31,7 @@ class Manager(object):
         self._lb_details = {}
         self._lb_listeners = {}
         self._lb_pools = {}
-        self._lb_def_pool_id = ''
+        self._lb_def_pool_ids = []
         self._lb_healthmonitors = {}
         self._lb_members = {}
 
@@ -43,7 +45,7 @@ class Manager(object):
                 healthmonitor_id = pool['healthmonitor']['id']
                 lb_healthmonitor = (
                     self.os_clients.neutronclient
-                    .show_lbaas_healthmonitor(healthmonitor_id)
+                    .show_lbaas_healthmonitor(healthmonitor_id)['healthmonitor']
                 )
                 self._lb_healthmonitors[healthmonitor_id] = lb_healthmonitor
             for member in pool['members']:
@@ -103,6 +105,7 @@ class Manager(object):
             lb_data = json.load(f)
         try:
             if self._lb_id == lb_data['lb_id']:
+                self._lb_fip = lb_data['lb_fip']
                 self._lb_tree = lb_data['lb_tree']
                 self._lb_details = lb_data['lb_details']
                 self._lb_listeners = lb_data['lb_listeners']
@@ -155,27 +158,29 @@ class Manager(object):
             listener_id = listener['id']
             nlbaas_listener_data = self._lb_listeners[listener_id]['listener']
 
-            self._lb_def_pool_id = nlbaas_listener_data['default_pool_id']
+            pool_id = nlbaas_listener_data['default_pool_id']
+            self._lb_def_pool_ids.append(pool_id)
             nlbaas_default_pool_data = \
-                self._lb_pools[self._lb_def_pool_id]['pool']
+                self._lb_pools[pool_id]['pool']
 
-            default_pool_name = "default"
+            default_pool_name = "legacy-%s" % nlbaas_default_pool_data['id']
             if nlbaas_default_pool_data['name']:
                 default_pool_name = nlbaas_default_pool_data['name']
 
+            listener_name = nlbaas_listener_data['name']
+            if not listener_name:
+                listener_name = "listener-%s" % nlbaas_listener_data['id']
+
             octavia_listener = {
-                'name': nlbaas_listener_data['name'],
+                'name': listener_name,
                 'protocol': nlbaas_listener_data['protocol'],
                 'protocol_port': nlbaas_listener_data['protocol_port'],
                 'default_pool': {
                     'name': default_pool_name,
                     'protocol': nlbaas_default_pool_data['protocol'],
                     'lb_algorithm': nlbaas_default_pool_data['lb_algorithm'],
-                    'healthmonitor':
-                        self._build_healthmonitor_obj(
-                            self._lb_def_pool_id) or '',
-                    'members': self._build_members_list(
-                        self._lb_def_pool_id) or ''
+                    'healthmonitor': self._build_healthmonitor_obj(pool_id) or '',
+                    'members': self._build_members_list(pool_id) or '',
                 }
             }
             octavia_lb_listeners.append(octavia_listener)
@@ -186,13 +191,17 @@ class Manager(object):
         octavia_lb_pools = []
         for pool in nlbaas_lb_tree['pools']:
             pool_id = pool['id']
-            if pool_id == self._lb_def_pool_id:
+            if pool_id in self._lb_def_pool_ids:
                 continue
             else:
                 nlbaas_pool_data = self._lb_pools[pool_id]['pool']
 
+                pool_name = nlbaas_pool_data['name']
+                if not pool_name:
+                    pool_name = "pool-%s" %  nlbaas_pool_data['id']
+
                 octavia_pool = {
-                    'name': nlbaas_pool_data['name'],
+                    'name': pool_name,
                     'description': nlbaas_pool_data['description'],
                     'protocol': nlbaas_pool_data['protocol'],
                     'lb_algorithm': nlbaas_pool_data['lb_algorithm'],
@@ -224,7 +233,44 @@ class Manager(object):
         return octavia_lb_tree
 
     def octavia_load_balancer_create(self, reuse_vip):
+        # Delete all health monitors
+        for healthmonitor_id, healthmonitor_data in self._lb_healthmonitors.items():
+            try:
+                self.os_clients.neutronclient.delete_lbaas_healthmonitor(healthmonitor_id)
+            except neutronclient.common.exceptions.NotFound:
+                pass
+
+        # Delete all pools
+        for pool_id, pool_data in self._lb_pools.items():
+            try:
+                self.os_clients.neutronclient.delete_lbaas_pool(pool_id)
+            except neutronclient.common.exceptions.NotFound:
+                pass
+
+        # Delete all listeners
+        for listener_id, listener_data in self._lb_listeners.items():
+            try:
+                self.os_clients.neutronclient.delete_listener(listener_id)
+            except neutronclient.common.exceptions.NotFound:
+                pass
+
+        # Delete loadbalancer
+        try:
+            self.os_clients.neutronclient.delete_loadbalancer(self._lb_id)
+        except neutronclient.common.exceptions.NotFound:
+            pass
+
         octavia_lb_tree = self.build_octavia_lb_tree(reuse_vip)
         pprint(octavia_lb_tree)
-        self.os_clients.octaviaclient.load_balancer_create(
+        new_lb = self.os_clients.octaviaclient.load_balancer_create(
             json=octavia_lb_tree)
+
+        if self._lb_fip:
+            vip_port_id = new_lb['loadbalancer']['vip_port_id']
+            self.os_clients.neutronclient.update_floatingip(
+                self._lb_fip['id'],
+                {"floatingip": {"port_id": vip_port_id}}
+            )
+
+        pprint(new_lb)
+        pprint(self._lb_fip) 

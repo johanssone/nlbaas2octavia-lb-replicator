@@ -36,10 +36,6 @@ The script will either:
 - Back up all of the information to a JSON file (if initially read from a file to begin with).
 - Generate a JSON object that fits Octavia, and sent it to Octavia API in order to create a fully populated load balancer.  
 
-## What it does not do
-- Modify or delete any existing load balancer configuration.
-- Moves floating IPs around.
-
 ## Usage example
 Backup a load balancer to a JSON file
 > `$ lb-replicator -l <LB_ID> --to_file`
