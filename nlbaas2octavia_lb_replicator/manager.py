@@ -42,7 +42,7 @@ class Manager(object):
                 healthmonitor_id = pool['healthmonitor']['id']
                 lb_healthmonitor = (
                     self.os_clients.neutronclient
-                    .show_health_monitor(healthmonitor_id)
+                    .show_lbaas_healthmonitor(healthmonitor_id)
                 )
                 self._lb_healthmonitors[healthmonitor_id] = lb_healthmonitor
             for member in pool['members']:
