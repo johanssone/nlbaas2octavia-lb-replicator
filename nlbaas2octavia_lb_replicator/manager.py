@@ -24,6 +24,7 @@ class Manager(object):
     def __init__(self, lb_id):
         self.os_clients = os_clients.OpenStackClients()
         self._lb_id = lb_id
+        self._lb_fip = {}
         self._lb_tree = {}
         self._lb_details = {}
         self._lb_listeners = {}
@@ -61,6 +62,13 @@ class Manager(object):
         self._lb_details = self.os_clients.neutronclient.show_loadbalancer(
             self._lb_id)
 
+        fips = self.os_clients.neutronclient.list_floatingips(
+            port_id=self._lb_details['loadbalancer']['vip_port_id']
+        ).get('floatingips')
+
+        if fips:
+            self._lb_fip = fips[0]
+
         # Scan lb_tree and retrive all objects to backup all the info
         # that tree is missing out. The Octavia lb tree contain more details.
         for listener in (
@@ -78,6 +86,7 @@ class Manager(object):
     def write_lb_data_file(self, filename):
         lb_data = {
             'lb_id': self._lb_id,
+            'lb_fip': self._lb_fip,
             'lb_tree': self._lb_tree,
             'lb_details': self._lb_details,
             'lb_listeners': self._lb_listeners,
