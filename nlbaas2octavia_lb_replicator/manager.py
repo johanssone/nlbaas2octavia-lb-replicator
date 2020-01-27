@@ -150,12 +150,16 @@ class Manager(object):
             nlbaas_default_pool_data = \
                 self._lb_pools[self._lb_def_pool_id]['pool']
 
+            default_pool_name = "default"
+            if nlbaas_default_pool_data['name']:
+                default_pool_name = nlbaas_default_pool_data['name']
+
             octavia_listener = {
                 'name': nlbaas_listener_data['name'],
                 'protocol': nlbaas_listener_data['protocol'],
                 'protocol_port': nlbaas_listener_data['protocol_port'],
                 'default_pool': {
-                    'name': nlbaas_default_pool_data['name'],
+                    'name': default_pool_name,
                     'protocol': nlbaas_default_pool_data['protocol'],
                     'lb_algorithm': nlbaas_default_pool_data['lb_algorithm'],
                     'healthmonitor':
