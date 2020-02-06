@@ -160,14 +160,25 @@ class Manager(object):
             listener_id = listener['id']
             nlbaas_listener_data = self._lb_listeners[listener_id]['listener']
 
+            default_pool = None
             pool_id = nlbaas_listener_data['default_pool_id']
-            self._lb_def_pool_ids.append(pool_id)
-            nlbaas_default_pool_data = \
-                self._lb_pools[pool_id]['pool']
+            if pool_id is not None:
+                self._lb_def_pool_ids.append(pool_id)
+                nlbaas_default_pool_data = \
+                    self._lb_pools[pool_id]['pool']
 
-            default_pool_name = "legacy-%s" % nlbaas_default_pool_data['id']
-            if nlbaas_default_pool_data['name']:
-                default_pool_name = nlbaas_default_pool_data['name']
+                default_pool_name = "legacy-%s" % nlbaas_default_pool_data['id']
+                if nlbaas_default_pool_data['name']:
+                    default_pool_name = nlbaas_default_pool_data['name']
+
+                default_pool = {
+                    'name': default_pool_name,
+                    'protocol': nlbaas_default_pool_data['protocol'],
+                    'lb_algorithm': nlbaas_default_pool_data['lb_algorithm'],
+                    'healthmonitor': self._build_healthmonitor_obj(pool_id) or '',
+                    'members': self._build_members_list(pool_id) or '',
+                }
+
 
             listener_name = nlbaas_listener_data['name']
             if not listener_name:
@@ -177,13 +188,7 @@ class Manager(object):
                 'name': listener_name,
                 'protocol': nlbaas_listener_data['protocol'],
                 'protocol_port': nlbaas_listener_data['protocol_port'],
-                'default_pool': {
-                    'name': default_pool_name,
-                    'protocol': nlbaas_default_pool_data['protocol'],
-                    'lb_algorithm': nlbaas_default_pool_data['lb_algorithm'],
-                    'healthmonitor': self._build_healthmonitor_obj(pool_id) or '',
-                    'members': self._build_members_list(pool_id) or '',
-                }
+                'default_pool': default_pool,
             }
             octavia_lb_listeners.append(octavia_listener)
         return octavia_lb_listeners
