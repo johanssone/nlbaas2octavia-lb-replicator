@@ -196,7 +196,7 @@ class Manager(object):
     def _build_pools_list(self):
         nlbaas_lb_tree = self._lb_tree['statuses']['loadbalancer']
         octavia_lb_pools = []
-        for pool in nlbaas_lb_tree['pools']:
+        for pool in nlbaas_lb_tree.get('pools', []):
             pool_id = pool['id']
             if pool_id in self._lb_def_pool_ids:
                 continue
