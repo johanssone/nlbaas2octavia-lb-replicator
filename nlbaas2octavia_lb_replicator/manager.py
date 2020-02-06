@@ -82,8 +82,10 @@ class Manager(object):
             self._lb_listeners[listener_id] = lb_listener
             self._pools_deep_scan(listener['pools'])
 
-        self._pools_deep_scan(
-            self._lb_tree['statuses']['loadbalancer']['pools'])
+        # NOTE(mnaser): If there is no pools, the pools value can be empty
+        #               so we try to get a default value.
+        pools = self._lb_tree['statuses']['loadbalancer'].get('pools', [])
+        self._pools_deep_scan(pools)
 
     def write_lb_data_file(self, filename):
         lb_data = {
