@@ -88,6 +88,7 @@ class Manager(object):
         self._pools_deep_scan(pools)
 
     def write_lb_data_file(self, filename):
+        self._lb_pools = self.fix_duplicate_pool_names(self._lb_pools)
         lb_data = {
             'lb_id': self._lb_id,
             'lb_fip': self._lb_fip,
@@ -116,6 +117,23 @@ class Manager(object):
                 self._lb_members = lb_data['lb_members']
         except ValueError:
             print('The file content does not match the lb_id you specified')
+
+    def fix_duplicate_pool_names(self, lb_pools):
+        rev_dict = {}
+        for k,v in lb_pools.iteritems():
+            rev_dict.setdefault(v['pool']['name'], set()).add(k)
+ 
+        duplicates = []
+        for key, values in rev_dict.items():
+            if len(values) > 1:
+              duplicates.append({key: values})
+        for dup in duplicates:
+            for k, v in dup.items():
+                count = 1
+                for ids in v:
+                    lb_pools[ids]['pool']['name'] = "{}_{}".format(k, count)
+                    count+=1
+        return lb_pools
 
     def _build_healthmonitor_obj(self, pool_id):
         nlbaas_pool_data = self._lb_pools[pool_id]['pool']
@@ -162,7 +180,7 @@ class Manager(object):
 
             default_pool = None
             pool_id = nlbaas_listener_data['default_pool_id']
-            if pool_id is not None:
+            if pool_id is not None and pool_id not in self._lb_def_pool_ids:
                 self._lb_def_pool_ids.append(pool_id)
                 nlbaas_default_pool_data = \
                     self._lb_pools[pool_id]['pool']
